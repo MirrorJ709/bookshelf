@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BookShelf - Text Editor</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: "Segoe UI", Arial, sans-serif; color: #1f2937;
+         background: linear-gradient(135deg, #0f766e, #2563eb 60%, #7c3aed); padding: 24px 12px; }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  h1 { color: #fff; text-align: center; margin: 0 0 14px; font-size: 1.7rem; }
+  .card { background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+
+  button { padding: 8px 12px; border: 0; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  button:disabled { background: #e5e7eb !important; color: #9ca3af !important; cursor: not-allowed; }
+  .primary { background: #2563eb; color: #fff; }
+  .primary:hover:not(:disabled) { background: #1d4ed8; }
+  .ghost { background: #f1f5f9; color: #334155; }
+  .ghost:hover { background: #e2e8f0; }
+  .ghost.on { background: #dbeafe; color: #1d4ed8; }
+  .badge { background: rgba(255,255,255,.25); border-radius: 99px; padding: 0 7px; margin-left: 4px; font-size: 12px; }
+  button:disabled .badge { background: transparent; }
+
+  /* Top bar */
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+  .divider { width: 1px; height: 24px; background: #e5e7eb; margin: 0 2px; }
+  .menu { position: relative; }
+  .dropdown { display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 170px; background: #fff;
+              border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.2); padding: 6px; z-index: 10; }
+  .menu.open .dropdown { display: block; }
+  .dropdown button { display: block; width: 100%; text-align: left; background: transparent; color: #1f2937; font-weight: 500; }
+  .dropdown button:hover { background: #eff6ff; }
+  .dropdown .danger { color: #dc2626; }
+
+  /* Find bar (hidden until you click Find) */
+  .findbar { display: none; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 12px; }
+  .findbar.show { display: flex; }
+  .findbar input[type=text] { padding: 8px; border: 2px solid #e5e7eb; border-radius: 8px; width: 150px; }
+  .findbar input[type=text]:focus { outline: none; border-color: #2563eb; }
+  .findbar label { font-size: 13px; color: #374151; }
+  #matchInfo { font-size: 13px; color: #6b7280; }
+
+  textarea { width: 100%; height: 340px; padding: 12px; margin-top: 12px; font: 16px/1.6 Consolas, monospace; color: #111827;
+             border: 2px solid #f1f5f9; border-radius: 10px; resize: vertical; }
+  textarea:focus { outline: none; border-color: #bfdbfe; }
+  .status { display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; margin-top: 8px; }
+
+  /* History — drawn as two little stacks */
+  summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: .5px; }
+  .hist-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .hint { font-size: 12px; color: #94a3b8; }
+  .danger-ghost { background: #fef2f2; color: #dc2626; }
+  .danger-ghost:hover { background: #fee2e2; }
+
+  .stacks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px; }
+  .stack-panel { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; }
+  .stack-panel h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; font-size: 11.5px; color: #64748b;
+                    font-weight: 700; text-transform: uppercase; letter-spacing: .6px; }
+  .pill { background: #e2e8f0; color: #334155; border-radius: 99px; padding: 1px 8px; font-size: 11px; letter-spacing: 0; }
+  ul { list-style: none; margin: 0; padding: 0; }
+
+  li { position: relative; background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #cbd5e1;
+       border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; font-size: 12.5px; cursor: pointer;
+       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s, border-color .15s; }
+  li:hover { background: #eff6ff; border-left-color: #93c5fd; }
+  li.top { background: #fffbeb; border-color: #fcd34d; border-left-color: #f59e0b; font-weight: 600; padding-right: 56px; }
+  li.top::after { content: "TOP"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+                  font-size: 9.5px; font-weight: 700; letter-spacing: .5px; color: #b45309;
+                  background: #fde68a; border-radius: 99px; padding: 1px 6px; }
+  li.flash { animation: slide .35s ease; }
+  @keyframes slide { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+  .none { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px; text-align: center; color: #9ca3af; font-size: 12px; }
+  .more { margin-top: 2px; color: #9ca3af; font-size: 12px; padding-left: 2px; }
+  @media (max-width: 560px) { .stacks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📚 BookShelf</h1>
+
+  <div class="card">
+    <div class="bar">
+      <button id="undoBtn" class="primary" title="Undo (Ctrl+Z)">↶ Undo<span class="badge" id="uBadge">0</span></button>
+      <button id="redoBtn" class="primary" title="Redo (Ctrl+Y)">↷ Redo<span class="badge" id="rBadge">0</span></button>
+      <div class="divider"></div>
+
+      <div class="menu">
+        <button class="ghost menubtn" title="Applies to the selection, or everything if nothing is selected">Format ▾</button>
+        <div class="dropdown">
+          <button id="upperBtn">UPPERCASE</button>
+          <button id="lowerBtn">lowercase</button>
+          <button id="titleBtn">Title Case</button>
+          <button id="cleanBtn">Clean spaces</button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="ghost menubtn" title="Applies to the selection, or everything if nothing is selected">Lines ▾</button>
+        <div class="dropdown">
+          <button id="sortBtn">Sort A-Z</button>
+          <button id="uniqBtn">Remove duplicates</button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="ghost menubtn">File ▾</button>
+        <div class="dropdown">
+          <button id="openBtn">Open...</button>
+          <button id="saveBtn">Save as .txt</button>
+          <button id="copyBtn">Copy all</button>
+          <button id="clearBtn" class="danger">Clear</button>
+        </div>
+      </div>
+      <button id="findToggle" class="ghost">🔍 Find</button>
+      <input type="file" id="file" accept=".txt,text/plain" hidden>
+    </div>
+
+    <div class="findbar" id="findBar">
+      <input type="text" id="findBox" placeholder="Find...">
+      <input type="text" id="replBox" placeholder="Replace with...">
+      <button id="findBtn" class="ghost">Find next</button>
+      <button id="replBtn" class="primary">Replace all</button>
+      <label><input type="checkbox" id="matchCase"> Match case</label>
+      <span id="matchInfo"></span>
+    </div>
+
+    <textarea id="editor" placeholder="Start typing here..." spellcheck="true"></textarea>
+    <div class="status">
+      <span id="counts"></span>
+      <span id="msg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <details open>
+      <summary>History</summary>
+      <div class="hist-head">
+        <span class="hint">LIFO — last in, first out · the top entry comes out next</span>
+        <button id="resetHistoryBtn" class="ghost danger-ghost" title="Empty both stacks (keeps the text)">⟲ Reset history</button>
+      </div>
+      <div class="stacks">
+        <div class="stack-panel">
+          <h3>Undo <span class="pill" id="uCount">0</span></h3>
+          <ul id="uList"></ul>
+        </div>
+        <div class="stack-panel">
+          <h3>Redo <span class="pill" id="rCount">0</span></h3>
+          <ul id="rList"></ul>
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<script>
+const editor = document.getElementById("editor");
+const findBox = document.getElementById("findBox");
+const replBox = document.getElementById("replBox");
+const matchCase = document.getElementById("matchCase");
+
+// Each stack holds EDITS: { id, label, before, after, caretBefore, caretAfter }
+// Undo moves the top edit from the undo stack to the redo stack, and Redo moves it back.
+let undoStack = [];
+let redoStack = [];
+let committed = "";   // the text as of the last recorded edit
+let timer = null;     // waits for a pause in typing before recording an edit
+let nextId = 1;
+let flashId = null;   // the edit that just moved (for the animation)
+const SHOW = 3;       // how many entries to show per stack
+
+// ----- Helpers -----
+function short(s) {
+  s = s.replace(/\n/g, "↵").replace(/\t/g, "⇥").replace(/ /g, "␣");
+  return s.length > 16 ? s.slice(0, 16) + "…" : s;
+}
+
+// Works out what changed between two texts, so each edit gets a clear name
+function describe(before, after) {
+  let p = 0;
+  while (p < before.length && p < after.length && before[p] === after[p]) p++;
+  let s = 0;
+  while (s < before.length - p && s < after.length - p &&
+         before[before.length - 1 - s] === after[after.length - 1 - s]) s++;
+  const removed = before.slice(p, before.length - s);
+  const inserted = after.slice(p, after.length - s);
+  let label;
+  if (removed === "") label = 'Typed "' + short(inserted) + '"';
+  else if (inserted === "") label = 'Deleted "' + short(removed) + '"';
+  else label = 'Changed "' + short(removed) + '" → "' + short(inserted) + '"';
+  return { label: label, caretBefore: before.length - s, caretAfter: after.length - s };
+}
+
+function autosave() {
+  try { localStorage.setItem("bookshelf", committed); } catch (e) {}
+}
+
+function say(text) {
+  const m = document.getElementById("msg");
+  m.textContent = text;
+  setTimeout(() => { if (m.textContent === text) m.textContent = ""; }, 2500);
+}
+
+function setCaret(pos) {
+  pos = Math.max(0, Math.min(pos, editor.value.length));
+  editor.setSelectionRange(pos, pos);
+}
+
+// ----- Core stack logic -----
+// Record what changed since the last edit: PUSH it on the undo stack
+function commit(customLabel) {
+  clearTimeout(timer);
+  if (editor.value === committed) return;
+  const d = describe(committed, editor.value);
+  undoStack.push({ id: nextId++, label: customLabel || d.label, before: committed, after: editor.value,
+                   caretBefore: d.caretBefore, caretAfter: d.caretAfter });
+  if (undoStack.length > 200) undoStack.shift();
+  committed = editor.value;
+  redoStack = [];            // a new edit clears the redo stack
+  flashId = null;
+  autosave();
+  render();
+}
+
+// POP the top edit off undo, restore the old text, PUSH the same edit on redo
+function undoOne() {
+  const e = undoStack.pop();
+  if (!e) return null;
+  redoStack.push(e);
+  committed = e.before;
+  editor.value = e.before;
+  setCaret(e.caretBefore);
+  flashId = e.id;
+  return e;
+}
+
+// POP the top edit off redo, re-apply it, PUSH it back on undo
+function redoOne() {
+  const e = redoStack.pop();
+  if (!e) return null;
+  undoStack.push(e);
+  committed = e.after;
+  editor.value = e.after;
+  setCaret(e.caretAfter);
+  flashId = e.id;
+  return e;
+}
+
+function finish() { autosave(); render(); editor.focus(); }
+
+function undo() { commit(); if (undoOne()) finish(); }
+function redo() { commit(); if (redoOne()) finish(); }
+
+// Jump several steps: keep popping until we reach the clicked edit
+function undoTo(id) {
+  commit();
+  if (!undoStack.some(e => e.id === id)) return;
+  let e;
+  do { e = undoOne(); } while (e && e.id !== id);
+  finish();
+}
+function redoTo(id) {
+  commit();
+  if (!redoStack.some(e => e.id === id)) return;
+  let e;
+  do { e = redoOne(); } while (e && e.id !== id);
+  finish();
+}
+
+// ----- Editing tools (each one is a single undoable edit) -----
+function replaceAll(text, label) {
+  commit();
+  editor.value = text;
+  commit(label);
+  editor.focus();
+}
+
+// Apply a change to the selection, or to the whole text if nothing is selected
+function transform(fn, label) {
+  commit();
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const whole = editor.value;
+  let result, piece = null;
+  if (s !== e) {
+    piece = fn(whole.slice(s, e));
+    result = whole.slice(0, s) + piece + whole.slice(e);
+  } else {
+    result = fn(whole);
+  }
+  if (result === whole) { say("Nothing to change"); return; }
+  editor.value = result;
+  commit(label);
+  editor.focus();
+  if (piece !== null) editor.setSelectionRange(s, s + piece.length);
+}
+
+const tools = {
+  upperBtn: [t => t.toUpperCase(), "UPPERCASE"],
+  lowerBtn: [t => t.toLowerCase(), "lowercase"],
+  titleBtn: [t => t.toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase()), "Title Case"],
+  cleanBtn: [t => t.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n"), "Clean spaces"],
+  sortBtn:  [t => t.split("\n").sort((a, b) => a.localeCompare(b)).join("\n"), "Sort lines"],
+  uniqBtn:  [t => Array.from(new Set(t.split("\n"))).join("\n"), "Remove duplicates"]
+};
+Object.keys(tools).forEach(id => {
+  document.getElementById(id).onclick = () => transform(tools[id][0], tools[id][1]);
+});
+
+// ----- Find & Replace -----
+function makeRegex() {
+  const q = findBox.value;
+  if (!q) return null;
+  return new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), matchCase.checked ? "g" : "gi");
+}
+
+function updateMatches() {
+  const re = makeRegex();
+  const info = document.getElementById("matchInfo");
+  if (!re) { info.textContent = ""; return; }
+  const n = (editor.value.match(re) || []).length;
+  info.textContent = n + (n === 1 ? " match" : " matches");
+}
+
+document.getElementById("findBtn").onclick = () => {
+  const q = findBox.value;
+  if (!q) { say("Type something to find"); return; }
+  const hay = matchCase.checked ? editor.value : editor.value.toLowerCase();
+  const needle = matchCase.checked ? q : q.toLowerCase();
+  let i = hay.indexOf(needle, editor.selectionEnd);
+  if (i === -1) i = hay.indexOf(needle, 0);       // wrap around
+  if (i === -1) { say("Not found"); return; }
+  editor.focus();
+  editor.setSelectionRange(i, i + q.length);
+};
+
+document.getElementById("replBtn").onclick = () => {
+  const re = makeRegex();
+  if (!re) { say("Type something to find"); return; }
+  commit();
+  const before = editor.value;
+  const n = (before.match(re) || []).length;
+  if (n === 0) { say("No matches"); return; }
+  editor.value = before.replace(re, () => replBox.value);
+  if (editor.value === before) { say("Nothing to change"); return; }
+  commit('Replace "' + short(findBox.value) + '" → "' + short(replBox.value) + '" (' + n + ")");
+  say(n + " replaced");
+};
+
+findBox.addEventListener("input", updateMatches);
+matchCase.addEventListener("change", updateMatches);
+
+// Show / hide the find bar
+document.getElementById("findToggle").onclick = () => {
+  const bar = document.getElementById("findBar");
+  const open = bar.classList.toggle("show");
+  document.getElementById("findToggle").classList.toggle("on", open);
+  if (open) findBox.focus(); else editor.focus();
+};
+
+// ----- File tools -----
+document.getElementById("openBtn").onclick = () => document.getElementById("file").click();
+
+document.getElementById("file").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => { replaceAll(String(reader.result), "Opened " + short(f.name)); say("Opened " + f.name); };
+  reader.readAsText(f);
+  e.target.value = "";
+};
+
+document.getElementById("saveBtn").onclick = () => {
+  const blob = new Blob([editor.value], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bookshelf.txt";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  say("Saved bookshelf.txt");
+};
+
+document.getElementById("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(editor.value); say("Copied!"); }
+  catch (e) { say("Copy not allowed here"); }
+};
+
+document.getElementById("clearBtn").onclick = () => replaceAll("", "Clear");
+
+// Empty both stacks, keep the text
+document.getElementById("resetHistoryBtn").onclick = () => {
+  if (undoStack.length === 0 && redoStack.length === 0) { say("History is already empty"); return; }
+  clearTimeout(timer);
+  undoStack = [];
+  redoStack = [];
+  flashId = null;
+  committed = editor.value;   // current text becomes the new baseline, so nothing shows as "pending"
+  autosave();
+  render();
+  say("History reset");
+};
+
+// ----- Dropdown menus -----
+function closeMenus() {
+  document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+}
+document.querySelectorAll(".menubtn").forEach(b => {
+  b.addEventListener("click", ev => {
+    const menu = b.parentElement;
+    const wasOpen = menu.classList.contains("open");
+    closeMenus();
+    if (!wasOpen) menu.classList.add("open");
+    ev.stopPropagation();
+  });
+});
+document.addEventListener("click", closeMenus);   // clicking anywhere else (or an item) closes the menu
+
+// ----- Drawing the page -----
+function fillList(id, stack, kind) {
+  const ul = document.getElementById(id);
+  ul.innerHTML = "";
+  if (stack.length === 0) {
+    const n = document.createElement("div");
+    n.className = "none";
+    n.textContent = "Empty";
+    ul.appendChild(n);
+    return;
+  }
+  const items = stack.slice().reverse();               // top of the stack first
+  items.slice(0, SHOW).forEach((e, i) => {
+    const li = document.createElement("li");
+    li.className = (i === 0 ? "top" : "") + (e.id === flashId ? " flash" : "");
+    li.textContent = e.label;
+    li.title = e.label + " (click to " + kind + " up to here)";
+    li.onclick = () => (kind === "undo" ? undoTo(e.id) : redoTo(e.id));
+    ul.appendChild(li);
+  });
+  if (items.length > SHOW) {
+    const m = document.createElement("div");
+    m.className = "more";
+    m.textContent = "+ " + (items.length - SHOW) + " more";
+    ul.appendChild(m);
+  }
+}
+
+function render() {
+  const t = editor.value;
+  const words = t.trim() === "" ? 0 : t.trim().split(/\s+/).length;
+  document.getElementById("counts").textContent = words + " words · " + t.length + " characters";
+
+  const pending = editor.value !== committed;          // typed but not recorded yet
+  document.getElementById("undoBtn").disabled = undoStack.length === 0 && !pending;
+  document.getElementById("redoBtn").disabled = redoStack.length === 0 || pending;
+  document.getElementById("uBadge").textContent = undoStack.length;
+  document.getElementById("rBadge").textContent = redoStack.length;
+  document.getElementById("uCount").textContent = undoStack.length;
+  document.getElementById("rCount").textContent = redoStack.length;
+  fillList("uList", undoStack, "undo");
+  fillList("rList", redoStack, "redo");
+  updateMatches();
+}
+
+// ----- Events -----
+editor.addEventListener("input", () => {
+  clearTimeout(timer);
+  timer = setTimeout(commit, 500);       // record an edit after a short pause
+  render();
+});
+
+// Use our own stacks instead of the browser's built-in undo
+editor.addEventListener("beforeinput", e => {
+  if (e.inputType === "historyUndo") { e.preventDefault(); undo(); }
+  if (e.inputType === "historyRedo") { e.preventDefault(); redo(); }
+});
+document.addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey) || e.target.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+});
+
+// Clicking a button should not steal the text selection from the editor
+document.addEventListener("mousedown", e => {
+  if (e.target.closest("button")) e.preventDefault();
+});
+
+document.getElementById("undoBtn").onclick = undo;
+document.getElementById("redoBtn").onclick = redo;
+
+// ----- Start -----
+try { committed = localStorage.getItem("bookshelf") || localStorage.getItem("stackpad") || ""; } catch (e) {}
+editor.value = committed;
+render();
+</script>
+</body>
+</html>
